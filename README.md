@@ -28,7 +28,7 @@
 </div>
 
 ### News
-- **[2024/12/19]** 🔥We released **Open-EMMA**, an open-source project for end-to-end motion planning autonomous driving tasks. Explore our [paper](https://arxiv.org/abs/2412.15208) for more details.
+- **[2024/12/19]** 🔥We released **OpenEMMA**, an open-source project for end-to-end motion planning autonomous driving tasks. Explore our [paper](https://arxiv.org/abs/2412.15208) for more details.
 
 ### Table of Contents
 - [Demos](#demos)
@@ -48,7 +48,7 @@
 To get started with OpenEMMA, follow these steps to set up your environment and dependencies.
 
 1. **Environment Setup**  
-   Set up a Conda environment for Open-EMMA with Python 3.8:
+   Set up a Conda environment for OpenEMMA with Python 3.8:
    ```bash
    conda create -n openemma python=3.8
    conda activate openemma
@@ -58,7 +58,7 @@ To get started with OpenEMMA, follow these steps to set up your environment and 
     Clone the OpenEMMA repository and navigate to the root directory:
     ```bash
     git clone git@github.com:taco-group/OpenEMMA.git
-    cd Open-EMMA
+    cd OpenEMMA
     ```
 
 3. **Install Dependencies**  
@@ -66,7 +66,7 @@ To get started with OpenEMMA, follow these steps to set up your environment and 
     ```bash
     conda install nvidia/label/cuda-12.4.0::cuda-toolkit
     ```
-    To install the core packages required for Open-EMMA, run the following command:
+    To install the core packages required for OpenEMMA, run the following command:
     ```bash
     pip install -r requirements.txt
     ```
@@ -77,16 +77,16 @@ To get started with OpenEMMA, follow these steps to set up your environment and 
     ```bash
     export OPENAI_API_KEY="your_openai_api_key"
     ```
-    This allows Open-EMMA to access GPT-4 for generating future waypoints and decision rationales.
+    This allows OpenEMMA to access GPT-4 for generating future waypoints and decision rationales.
 
 ### Usage  
-After setting up the environment, you can start using Open-EMMA with the following instructions:
+After setting up the environment, you can start using OpenEMMA with the following instructions:
 
 1. **Prepare Input Data**   
     Download and extract the [nuScenes dataset](https://www.nuscenes.org/nuscenes#download)
     
-2. **Run Open-EMMA**  
-    Use the following command to execute Open-EMMA's main script:
+2. **Run OpenEMMA**  
+    Use the following command to execute OpenEMMA's main script:
     ```bash
     python main.py \
         --model-path qwen \
@@ -98,7 +98,7 @@ After setting up the environment, you can start using Open-EMMA with the followi
     Currently, we support the following models: `GPT-4o`, `LLaVA-1.6-Mistral-7B`, `Llama-3.2-11B-Vision-Instruct`, and `Qwen2-VL-7B-Instruct`. To use a specific model, simply pass `gpt`, `llava`, `llama`, and `qwen`as the argument to `--model-path`.
 
 3. **Output Interpretation**   
-    After running the model, Open-EMMA generates the following output in the `./qwen-reults` location:
+    After running the model, OpenEMMA generates the following output in the `./qwen-reults` location:
 
     - **Waypoints**: A list of future waypoints predicting the ego vehicle’s trajectory.
 
