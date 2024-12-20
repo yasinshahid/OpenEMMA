@@ -6,6 +6,8 @@
     <a href="README.md"><strong>English</strong></a> | <a href="README_zh-CN.md"><strong>中文</strong></a>
 </p>
 
+<div id="top" align="center">
+
 ![Code License](https://img.shields.io/badge/Code%20License-Apache%202.0-brightgreen)
 [![arXiv](https://img.shields.io/badge/arXiv-2412.15208-b31b1b.svg)](https://arxiv.org/abs/2412.15208)
 
