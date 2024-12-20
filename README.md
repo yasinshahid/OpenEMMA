@@ -105,7 +105,7 @@ After setting up the environment, you can start using Open-EMMA with the followi
 ## Contact
 For help or issues using this package, please submit a GitHub issue.
 
-For personal communication related to this package, please contact Shuo Xing (shuoxing@tamu.edu).
+For personal communication related to this project, please contact Shuo Xing (shuoxing@tamu.edu).
 
 ## Citation
 We are more than happy if this code is helpful to your work. 
