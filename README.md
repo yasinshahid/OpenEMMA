@@ -1,5 +1,5 @@
 <p align="center" width="60%">
-<img src="assets/logo.png" alt="OpenEMMA" style="width: 60%; min-width: 200px; display: block; margin: auto; background-color: transparent;">
+<img src="assets/logo.png" alt="OpenEMMA" style="width: 35%; min-width: 200px; display: block; margin: auto; background-color: transparent;">
 </p>
 
 <p align="center">
