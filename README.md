@@ -20,7 +20,7 @@
 </div>
 
 ### News
-- **[2024/12/19]** 🔥We released **Open-EMMA**, an open-source project for end-to-end motion planning autonomous driving tasks. Exploreour [paper](https://arxiv.org/abs/2412.15208) for more details.
+- **[2024/12/19]** 🔥We released **Open-EMMA**, an open-source project for end-to-end motion planning autonomous driving tasks. Explore our [paper](https://arxiv.org/abs/2412.15208) for more details.
 
 ![Code License](https://img.shields.io/badge/Code%20License-Apache%202.0-brightgreen)
 
