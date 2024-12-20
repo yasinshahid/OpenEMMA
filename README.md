@@ -7,7 +7,7 @@
 </p>
 
 # OpenEMMA: Open-Source Multimodal Model for End-to-End Autonomous Driving
-**Open-EMMA** is an open-source implementation of  [Waymo's End-to-End Multimodal Model for Autonomous Driving (EMMA)](https://waymo.com/blog/2024/10/introducing-emma/), offering an end-to-end framework for motion palnning in autonomous vehicles. **Open-EMMA** leverages the pretrained world knowledge of Vision Language Models  (VLMs), such as GPT-4 and LLaVA, to integrate text and front-view camera inputs, enabling precise predictions of future ego waypoints and providing decision rationales. Our goal is to provide accessible tools for researchers and developers to advance autonomous driving research and applications.
+**OpenEMMA** is an open-source implementation of  [Waymo's End-to-End Multimodal Model for Autonomous Driving (EMMA)](https://waymo.com/blog/2024/10/introducing-emma/), offering an end-to-end framework for motion palnning in autonomous vehicles. **OpenEMMA** leverages the pretrained world knowledge of Vision Language Models  (VLMs), such as GPT-4 and LLaVA, to integrate text and front-view camera inputs, enabling precise predictions of future ego waypoints and providing decision rationales. Our goal is to provide accessible tools for researchers and developers to advance autonomous driving research and applications.
 
 <div align="center">
   <img src="assets/EMMA-Paper-1__3_.webp" alt="EMMA diagram" width="800"/>
