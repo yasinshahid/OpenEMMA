@@ -15,6 +15,7 @@ Werkzeug
 argparse
 transformers>=4.46.2  # for Mllama
 ultralytics
+qwen_vl_utils
 
 # # Logging -------------------------------------
 # tensorboard>=2.4.1

@@ -72,6 +72,9 @@ def vlm_inference(text=None, images=None, sys_message=None, processor=None, mode
         
         elif "qwen" in args.model_path:
             message = getMessage(text, image=images, args=args)
+            text = processor.apply_chat_template(
+                message, tokenize=False, add_generation_prompt=True
+            )
             image_inputs, video_inputs = process_vision_info(message)
             inputs = processor(
                 text=[text],
