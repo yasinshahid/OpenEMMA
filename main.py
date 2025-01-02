@@ -16,7 +16,7 @@ from scipy.integrate import cumulative_trapezoid
 
 import json
 from openemma.YOLO3D.inference import yolo3d_nuScenes
-from OpenEMMA.utils import EstimateCurvatureFromTrajeemmary, IntegrateCurvatureForPoints, OverlayTrajectory, WriteImageSequenceToVideo
+from utils import EstimateCurvatureFromTrajecotry, IntegrateCurvatureForPoints, OverlayTrajectory, WriteImageSequenceToVideo
 from transformers import MllamaForConditionalGeneration, AutoProcessor, Qwen2VLForConditionalGeneration, AutoTokenizer
 from PIL import Image
 from qwen_vl_utils import process_vision_info
@@ -340,7 +340,7 @@ if __name__ == '__main__':
         ego_velocities[0] = ego_velocities[1]
 
         # Get the curvature of the ego vehicle.
-        ego_curvatures = EstimateCurvatureFromTrajeemmary(ego_poses_world)
+        ego_curvatures = EstimateCurvatureFromTrajecotry(ego_poses_world)
         ego_velocities_norm = np.linalg.norm(ego_velocities, axis=1)
         estimated_points = IntegrateCurvatureForPoints(ego_curvatures, ego_velocities_norm, ego_poses_world[0],
                                                        atan2(ego_velocities[0][1], ego_velocities[0][0]), scene_length)
