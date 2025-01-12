@@ -28,6 +28,7 @@
 </div>
 
 ### ニュース
+- **[2025/1/12]** 🔥**OpenEMMA** は PyPI パッケージとして利用可能です！正式にインストールするには `pip install openemma` を使用してください。
 - **[2024/12/19]** 🔥**OpenEMMA**をリリースしました。エンドツーエンドのモーションプランニング自動運転タスクのためのオープンソースプロジェクトです。詳細は[論文](https://arxiv.org/abs/2412.15208)をご覧ください。
 
 ### 目次
@@ -53,24 +54,29 @@ OpenEMMAを始めるには、以下の手順に従って環境と依存関係を
    conda create -n openemma python=3.8
    conda activate openemma
    ```
+2. **OpenEMMA をインストールする**   
+    PyPI を使用して、次のコマンドで OpenEMMA をインストールできます：
+    ```bash
+    pip install openemma
+    ```
+    または、次の手順に従ってください：
+    - **OpenEMMAリポジトリのクローン**   
+        OpenEMMAリポジトリをクローンし、ルートディレクトリに移動します：
+        ```bash
+        git clone git@github.com:taco-group/OpenEMMA.git
+        cd OpenEMMA
+        ```
 
-2. **OpenEMMAリポジトリのクローン**   
-    OpenEMMAリポジトリをクローンし、ルートディレクトリに移動します：
-    ```bash
-    git clone git@github.com:taco-group/OpenEMMA.git
-    cd OpenEMMA
-    ```
-
-3. **依存関係のインストール**  
-    cudatoolkitがインストールされていることを確認します。インストールされていない場合は、以下のコマンドを使用します：
-    ```bash
-    conda install nvidia/label/cuda-12.4.0::cuda-toolkit
-    ```
-    OpenEMMAに必要なコアパッケージをインストールするには、以下のコマンドを実行します：
-    ```bash
-    pip install -r requirements.txt
-    ```
-    これにより、YOLO-3Dなどの重要なオブジェクト検出ツールの依存関係がすべてインストールされます。YOLO-3Dを実行するために必要なウェイトは、最初の実行時に自動的にダウンロードされます。
+    - **依存関係のインストール**  
+        cudatoolkitがインストールされていることを確認します。インストールされていない場合は、以下のコマンドを使用します：
+        ```bash
+        conda install nvidia/label/cuda-12.4.0::cuda-toolkit
+        ```
+        OpenEMMAに必要なコアパッケージをインストールするには、以下のコマンドを実行します：
+        ```bash
+        pip install -r requirements.txt
+        ```
+        これにより、YOLO-3Dなどの重要なオブジェクト検出ツールの依存関係がすべてインストールされます。YOLO-3Dを実行するために必要なウェイトは、最初の実行時に自動的にダウンロードされます。
 
 4. **GPT-4 APIアクセスの設定**  
     GPT-4の推論機能を有効にするために、OpenAIからAPIキーを取得します。コード内で直接APIキーを追加するか、環境変数として設定します：
@@ -87,6 +93,15 @@ OpenEMMAを始めるには、以下の手順に従って環境と依存関係を
     
 2. **OpenEMMAの実行**  
     OpenEMMAのメインスクリプトを実行するには、以下のコマンドを使用します：
+    - PyPI:
+    ```bash
+    openemma \
+        --model-path qwen \
+        --dataroot [dir-of-nuscnse-dataset] \
+        --version [vesion-of-nuscnse-dataset] \
+        --method openemma
+    ```
+    - Github Repo:
     ```bash
     python main.py \
         --model-path qwen \

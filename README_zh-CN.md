@@ -28,6 +28,7 @@
 </div>
 
 ### 新闻
+- **[2025/1/12]** 🔥现在可以通过 PyPI 包安装 **OpenEMMA**！使用 `pip install openemma` 完成安装。
 - **[2024/12/19]** 🔥我们发布了 **Open-EMMA**，一个用于端到端运动规划自动驾驶任务的开源项目。请参阅我们的[论文](https://arxiv.org/abs/2412.15208)，了解更多详情。
 
 ### 目录
@@ -53,24 +54,32 @@
    conda create -n openemma-env python=3.8
    conda activate openemma-env
    ```
+2. **安裝 OpenEMMA**  
+您現在可以使用 PyPI 通過單個命令安裝 OpenEMMA：
+    ```bash
+    pip install openemma
+    ```
+   或者，按照以下步驟操作：
+   - **克隆 Open-EMMA 仓库**  
+      克隆 Open-EMMA 仓库并进入根目录：
+      ```bash
+      git clone git@github.com:taco-group/OpenEMMA.git
+      cd OpenEMMA
+      ```
 
-2. **克隆 Open-EMMA 仓库**  
-   克隆 Open-EMMA 仓库并进入根目录：
-   ```bash
-   git clone https://github.com/your-repo/Open-EMMA.git
-   cd Open-EMMA
-   ```
+   - **安装必要的库**
 
-3. **安装必要的库**
+      确保已安装cudatoolkit。如果未安装，可以使用以下命令进行安装：
+      
+      ```bash
+        conda install nvidia/label/cuda-12.4.0::cuda-toolkit
+      ```
+      运行以下命令来安装 Open-EMMA 所需的核心包：
 
-   确保已安装cudatoolkit。如果未安装，可以使用以下命令进行安装：
-
-   运行以下命令来安装 Open-EMMA 所需的核心包：
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-   这将安装所有必要的库，包括 YOLO-3D（用于关键对象检测的外部工具）。YOLO-3D 运行所需的模型权重会在首次执行时自动下载。
+      ```bash
+      pip install -r requirements.txt
+      ```
+      这将安装所有必要的库，包括 YOLO-3D（用于关键对象检测的外部工具）。YOLO-3D 运行所需的模型权重会在首次执行时自动下载。
 
 4. **设置 GPT-4 API 访问**  
    
@@ -93,7 +102,15 @@
 2. **运行 Open-EMMA**
 
    使用以下命令来执行 Open-EMMA 的主脚本：
-
+   - PyPI:
+    ```bash
+    openemma \
+        --model-path qwen \
+        --dataroot [dir-of-nuscnse-dataset] \
+        --version [vesion-of-nuscnse-dataset] \
+        --method openemma
+    ```
+   - Github Repo:
    ```bash
     python main.py \
         --model-path qwen \

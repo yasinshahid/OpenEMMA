@@ -28,6 +28,7 @@
 </div>
 
 ### News
+- **[2025/1/12]** 🔥**OpenEMMA** is now available as a PyPI package! You can install it using `pip install openemma`. 
 - **[2024/12/19]** 🔥We released **OpenEMMA**, an open-source project for end-to-end motion planning autonomous driving tasks. Explore our [paper](https://arxiv.org/abs/2412.15208) for more details.
 
 ### Table of Contents
@@ -53,26 +54,30 @@ To get started with OpenEMMA, follow these steps to set up your environment and 
    conda create -n openemma python=3.8
    conda activate openemma
    ```
-
-2. **Clone OpenEMMA Repository**   
-    Clone the OpenEMMA repository and navigate to the root directory:
+2. **Install OpenEMMA**   
+You can now install OpenEMMA with a single command using PyPI:
     ```bash
-    git clone git@github.com:taco-group/OpenEMMA.git
-    cd OpenEMMA
+    pip install openemma
     ```
+    Alternatively, follow these steps:
+    - **Clone OpenEMMA Repository**   
+        Clone the OpenEMMA repository and navigate to the root directory:
+        ```bash
+        git clone git@github.com:taco-group/OpenEMMA.git
+        cd OpenEMMA
+        ```
+    - **Install Dependencies**  
+        Ensure you have cudatoolkit installed. If not, use the following command:
+        ```bash
+        conda install nvidia/label/cuda-12.4.0::cuda-toolkit
+        ```
+        To install the core packages required for OpenEMMA, run the following command:
+        ```bash
+        pip install -r requirements.txt
+        ```
+        This will install all dependencies, including those for YOLO-3D, an external tool used for critical object detection. The weights needed to run YOLO-3D will be automatically downloaded during the first execution.
 
-3. **Install Dependencies**  
-    Ensure you have cudatoolkit installed. If not, use the following command:
-    ```bash
-    conda install nvidia/label/cuda-12.4.0::cuda-toolkit
-    ```
-    To install the core packages required for OpenEMMA, run the following command:
-    ```bash
-    pip install -r requirements.txt
-    ```
-    This will install all dependencies, including those for YOLO-3D, an external tool used for critical object detection. The weights needed to run YOLO-3D will be automatically downloaded during the first execution.
-
-4. **Set up GPT-4 API Access**  
+3. **Set up GPT-4 API Access**  
     To enable GPT-4’s reasoning capabilities, obtain an API key from OpenAI. You can add your API key directly in the code where prompted or set it up as an environment variable:
     ```bash
     export OPENAI_API_KEY="your_openai_api_key"
@@ -87,6 +92,15 @@ After setting up the environment, you can start using OpenEMMA with the followin
     
 2. **Run OpenEMMA**  
     Use the following command to execute OpenEMMA's main script:
+    - PyPI:
+    ```bash
+    openemma \
+        --model-path qwen \
+        --dataroot [dir-of-nuscnse-dataset] \
+        --version [vesion-of-nuscnse-dataset] \
+        --method openemma
+    ```
+    - Github Repo:
     ```bash
     python main.py \
         --model-path qwen \
