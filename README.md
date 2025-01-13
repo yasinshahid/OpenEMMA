@@ -15,7 +15,7 @@
 
 
 # OpenEMMA: Open-Source Multimodal Model for End-to-End Autonomous Driving
-**OpenEMMA** is an open-source implementation of  [Waymo's End-to-End Multimodal Model for Autonomous Driving (EMMA)](https://waymo.com/blog/2024/10/introducing-emma/), offering an end-to-end framework for motion palnning in autonomous vehicles. **OpenEMMA** leverages the pretrained world knowledge of Vision Language Models  (VLMs), such as GPT-4 and LLaVA, to integrate text and front-view camera inputs, enabling precise predictions of future ego waypoints and providing decision rationales. Our goal is to provide accessible tools for researchers and developers to advance autonomous driving research and applications.
+**OpenEMMA** is an open-source implementation of  [Waymo's End-to-End Multimodal Model for Autonomous Driving (EMMA)](https://waymo.com/blog/2024/10/introducing-emma/), offering an end-to-end framework for motion planning in autonomous vehicles. **OpenEMMA** leverages the pretrained world knowledge of Vision Language Models  (VLMs), such as GPT-4 and LLaVA, to integrate text and front-view camera inputs, enabling precise predictions of future ego waypoints and providing decision rationales. Our goal is to provide accessible tools for researchers and developers to advance autonomous driving research and applications.
 
 <div align="center">
   <img src="assets/EMMA-Paper-1__3_.webp" alt="EMMA diagram" width="800"/>
@@ -24,12 +24,12 @@
 
 <div align="center">
   <img src="assets/openemma-pipeline.png" alt="OpenEMMA diagram" width="800"/>
-  <p><em>Figure 2. OpenEMMA: Ours Open-Source End-to-End Autonomous Driving Framework based on Pre-trained VLMs.</em></p>
+  <p><em>Figure 2. OpenEMMA: Our Open-Source End-to-End Autonomous Driving Framework based on Pre-trained VLMs.</em></p>
 </div>
 
 ### News
 - **[2025/1/12]** 🔥**OpenEMMA** is now available as a PyPI package! You can install it using `pip install openemma`. 
-- **[2024/12/19]** 🔥We released **OpenEMMA**, an open-source project for end-to-end motion planning autonomous driving tasks. Explore our [paper](https://arxiv.org/abs/2412.15208) for more details.
+- **[2024/12/19]** 🔥We released **OpenEMMA**, an open-source project for end-to-end motion planning in autonomous driving tasks. Explore our [paper](https://arxiv.org/abs/2412.15208) for more details.
 
 ### Table of Contents
 - [Demos](#demos)
@@ -96,8 +96,8 @@ After setting up the environment, you can start using OpenEMMA with the followin
     ```bash
     openemma \
         --model-path qwen \
-        --dataroot [dir-of-nuscnse-dataset] \
-        --version [vesion-of-nuscnse-dataset] \
+        --dataroot [dir-of-nuScenes-dataset] \
+        --version [vesion-of-nuScenes-dataset] \
         --method openemma
     ```
     - Github Repo:
@@ -112,7 +112,7 @@ After setting up the environment, you can start using OpenEMMA with the followin
     Currently, we support the following models: `GPT-4o`, `LLaVA-1.6-Mistral-7B`, `Llama-3.2-11B-Vision-Instruct`, and `Qwen2-VL-7B-Instruct`. To use a specific model, simply pass `gpt`, `llava`, `llama`, and `qwen`as the argument to `--model-path`.
 
 3. **Output Interpretation**   
-    After running the model, OpenEMMA generates the following output in the `./qwen-reults` location:
+    After running the model, OpenEMMA generates the following output in the `./qwen-results` location:
 
     - **Waypoints**: A list of future waypoints predicting the ego vehicle’s trajectory.
 
