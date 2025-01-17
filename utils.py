@@ -243,7 +243,7 @@ def OverlayTrajectory(img, points3d_world: list, cam_to_ego, ego_to_world, color
 
 
 
-def EstimateCurvatureFromTrajecotry(traj):
+def EstimateCurvatureFromTrajectory(traj):
     traj = traj[:, :2]
 
     # Initialize curvature array
