@@ -97,7 +97,7 @@ After setting up the environment, you can start using OpenEMMA with the followin
     openemma \
         --model-path qwen \
         --dataroot [dir-of-nuScenes-dataset] \
-        --version [vesion-of-nuScenes-dataset] \
+        --version [version-of-nuScenes-dataset] \
         --method openemma
     ```
     - Github Repo:
@@ -105,7 +105,7 @@ After setting up the environment, you can start using OpenEMMA with the followin
     python main.py \
         --model-path qwen \
         --dataroot [dir-of-nuscnse-dataset] \
-        --version [vesion-of-nuscnse-dataset] \
+        --version [version-of-nuscnse-dataset] \
         --method openemma
     ```
 
