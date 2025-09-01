@@ -2,6 +2,9 @@ import base64
 import os.path
 import re
 import argparse
+import signal
+import time
+import gc
 from datetime import datetime
 from math import atan2
 
@@ -49,6 +52,40 @@ def getMessage(prompt, image=None, args=None):
         ]   
     return message
 
+
+# Timeout handler for VLM inference
+class TimeoutError(Exception):
+    pass
+
+def timeout_handler(signum, frame):
+    raise TimeoutError("VLM inference timeout")
+
+def vlm_inference_with_timeout(text=None, images=None, sys_message=None, processor=None, model=None, tokenizer=None, args=None, timeout=120):
+    """VLM inference with timeout protection"""
+    print(f"🤖 Starting VLM inference (timeout: {timeout}s)...")
+    
+    # Set up timeout
+    signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(timeout)
+    
+    try:
+        result = vlm_inference(text, images, sys_message, processor, model, tokenizer, args)
+        signal.alarm(0)  # Cancel timeout
+        print("✅ VLM inference completed successfully")
+        return result
+    except TimeoutError:
+        print(f"⚠️ VLM inference timed out after {timeout}s")
+        return "Unable to generate response due to timeout"
+    except Exception as e:
+        signal.alarm(0)  # Cancel timeout
+        print(f"❌ VLM inference error: {str(e)}")
+        return f"Unable to generate response due to error: {str(e)}"
+    finally:
+        signal.alarm(0)  # Ensure timeout is cancelled
+        # Clear GPU memory
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
 
 def vlm_inference(text=None, images=None, sys_message=None, processor=None, model=None, tokenizer=None, args=None):
         if "llama" in args.model_path or "Llama" in args.model_path:
@@ -160,24 +197,25 @@ def vlm_inference(text=None, images=None, sys_message=None, processor=None, mode
             return result.choices[0].message.content
 
 def SceneDescription(obs_images, processor=None, model=None, tokenizer=None, args=None):
+    print("📝 Generating scene description...")
     prompt = f"""You are a autonomous driving labeller. You have access to these front-view camera images of a car taken at a 0.5 second interval over the past 5 seconds. Imagine you are driving the car. Describe the driving scene according to traffic lights, movements of other cars or pedestrians and lane markings."""
 
     if "llava" in args.model_path:
         prompt = f"""You are an autonomous driving labeller. You have access to these front-view camera images of a car taken at a 0.5 second interval over the past 5 seconds. Imagine you are driving the car. Provide a concise description of the driving scene according to traffic lights, movements of other cars or pedestrians and lane markings."""
 
-    result = vlm_inference(text=prompt, images=obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args)
+    result = vlm_inference_with_timeout(text=prompt, images=obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args, timeout=90)
     return result
 
 def DescribeObjects(obs_images, processor=None, model=None, tokenizer=None, args=None):
-
+    print("🚗 Identifying critical objects...")
     prompt = f"""You are a autonomous driving labeller. You have access to a front-view camera images of a vehicle taken at a 0.5 second interval over the past 5 seconds. Imagine you are driving the car. What other road users should you pay attention to in the driving scene? List two or three of them, specifying its location within the image of the driving scene and provide a short description of the that road user on what it is doing, and why it is important to you."""
 
-    result = vlm_inference(text=prompt, images=obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args)
+    result = vlm_inference_with_timeout(text=prompt, images=obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args, timeout=90)
 
     return result
 
 def DescribeOrUpdateIntent(obs_images, prev_intent=None, processor=None, model=None, tokenizer=None, args=None):
-
+    print("🎯 Determining driving intent...")
     if prev_intent is None:
         prompt = f"""You are a autonomous driving labeller. You have access to a front-view camera images of a vehicle taken at a 0.5 second interval over the past 5 seconds. Imagine you are driving the car. Based on the lane markings and the movement of other cars and pedestrians, describe the desired intent of the ego car. Is it going to follow the lane to turn left, turn right, or go straight? Should it maintain the current speed or slow down or speed up?"""
 
@@ -190,7 +228,7 @@ def DescribeOrUpdateIntent(obs_images, prev_intent=None, processor=None, model=N
         if "llava" in args.model_path:
             prompt = f"""You are a autonomous driving labeller. You have access to a front-view camera images of a vehicle taken at a 0.5 second interval over the past 5 seconds. Imagine you are driving the car. Half a second ago your intent was to {prev_intent}. Based on the updated lane markings and the updated movement of other cars and pedestrians, do you keep your intent or do you change it? Provide a concise description explanation of your current intent: """
 
-    result = vlm_inference(text=prompt, images=obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args)
+    result = vlm_inference_with_timeout(text=prompt, images=obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args, timeout=90)
 
     return result
 
@@ -232,10 +270,15 @@ def GenerateMotion(obs_images, obs_waypoints, obs_velocities, obs_curvatures, gi
         prompt = f"""These are frames from a video taken by a camera mounted in the front of a car. The images are taken at a 0.5 second interval. 
         The 5 second historical velocities and curvatures of the ego car are {obs_speed_curvature_str}. 
         Infer the association between these numbers and the image sequence. Generate the predicted future speeds and curvatures in the format [speed_1, curvature_1], [speed_2, curvature_2],..., [speed_10, curvature_10]. Write the raw text not markdown or latex. Future speeds and curvatures:"""
+    print("🚀 Generating motion prediction...")
     for rho in range(3):
-        result = vlm_inference(text=prompt, images=obs_images, sys_message=sys_message, processor=processor, model=model, tokenizer=tokenizer, args=args)
-        if not "unable" in result and not "sorry" in result and "[" in result:
+        print(f"   Attempt {rho+1}/3...")
+        result = vlm_inference_with_timeout(text=prompt, images=obs_images, sys_message=sys_message, processor=processor, model=model, tokenizer=tokenizer, args=args, timeout=120)
+        if not "unable" in result.lower() and not "sorry" in result.lower() and not "timeout" in result.lower() and "[" in result:
+            print("   ✅ Motion prediction successful!")
             break
+        else:
+            print(f"   ⚠️ Attempt {rho+1} failed, retrying...")
     return result, scene_description, object_description, intent_description
 
 if __name__ == '__main__':
@@ -430,10 +473,12 @@ if __name__ == '__main__':
                 with open(os.path.join(curr_image), "rb") as image_file:
                     img = cv2.imdecode(np.frombuffer(image_file.read(), dtype=np.uint8), cv2.IMREAD_COLOR)
 
+            print(f"\n📊 === PROCESSING TIMESTEP {i+1}/{max_timesteps} ===")
             for rho in range(3):
                 # Assemble the prompt.
                 if not "gpt" in args.model_path:
                     obs_images = curr_image
+                print(f"🗺️ Starting VLM analysis for timestep {i+1}...")
                 (prediction,
                 scene_description,
                 object_description,
