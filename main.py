@@ -306,16 +306,28 @@ if __name__ == '__main__':
     scenes = nusc.scene
     
     print(f"Number of scenes: {len(scenes)}")
+    print(f"Available scene names: {[scene['name'] for scene in scenes[:5]]}...")  # Show first 5 scene names
+    
+    # MINIMAL SUBSET CONFIGURATION - Process only 1 scene for baseline
+    MAX_SCENES = 1
+    MAX_TIMESTEPS_PER_SCENE = 3
+    
+    print(f"🚀 RUNNING MINIMAL BASELINE: {MAX_SCENES} scene(s), max {MAX_TIMESTEPS_PER_SCENE} timesteps each")
+    scenes_processed = 0
 
     for scene in scenes:
+        # Stop after processing MAX_SCENES
+        if scenes_processed >= MAX_SCENES:
+            print(f"✅ Completed processing {MAX_SCENES} scene(s) for baseline")
+            break
+            
         token = scene['token']
         first_sample_token = scene['first_sample_token']
         last_sample_token = scene['last_sample_token']
         name = scene['name']
         description = scene['description']
-
-        if not name in ["scene-0103", "scene-1077"]:
-            continue
+        
+        print(f"🎯 Processing scene: {name}")
 
         # Get all image and pose in this scene
         front_camera_images = []
@@ -388,7 +400,11 @@ if __name__ == '__main__':
         ade1s_list = []
         ade2s_list = []
         ade3s_list = []
-        for i in range(scene_length - TTL_LEN):
+        # Limit timesteps for minimal baseline
+        max_timesteps = min(MAX_TIMESTEPS_PER_SCENE, scene_length - TTL_LEN)
+        print(f"📊 Processing {max_timesteps} timesteps (out of {scene_length - TTL_LEN} available)")
+        
+        for i in range(max_timesteps):
             # Get the raw image data.
             # utils.PlotBase64Image(front_camera_images[0])
             obs_images = front_camera_images[i:i+OBS_LEN]
@@ -434,7 +450,7 @@ if __name__ == '__main__':
                 continue
             speed_curvature_pred = [[float(v), float(k)] for v, k in coordinates]
             speed_curvature_pred = speed_curvature_pred[:10]
-            print(f"Got {len(speed_curvature_pred)} future actions: {speed_curvature_pred}")
+            print(f"✅ Timestep {i+1}/{max_timesteps}: Got {len(speed_curvature_pred)} future actions")
 
             # GT
             # OverlayTrajectory(img, fut_ego_traj_world, obs_camera_params[-1], obs_ego_poses[-1], color=(255, 0, 0))
@@ -518,7 +534,8 @@ if __name__ == '__main__':
         if args.plot:
             WriteImageSequenceToVideo(cam_images_sequence, f"{timestamp}/{name}")
 
-        # break  # Scenes
+        scenes_processed += 1
+        print(f"🎉 Completed scene {name} ({scenes_processed}/{MAX_SCENES})")
 
 
 def vlm_inference(text=None, images=None, sys_message=None, processor=None, model=None, tokenizer=None, args=None):
