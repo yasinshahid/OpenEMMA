@@ -5,6 +5,7 @@ import argparse
 import signal
 import time
 import gc
+import traceback
 from datetime import datetime
 from math import atan2
 
@@ -35,6 +36,116 @@ OBS_LEN = 10
 FUT_LEN = 10
 TTL_LEN = OBS_LEN + FUT_LEN
 
+# ==========================
+# DEBUGGING FUNCTIONS
+# ==========================
+
+def debug_gpu_memory(stage="Unknown"):
+    """Debug GPU memory usage at different stages"""
+    print(f"\n🔍 === GPU MEMORY DEBUG - {stage} ===")
+    if torch.cuda.is_available():
+        allocated = torch.cuda.memory_allocated() / 1e9
+        reserved = torch.cuda.memory_reserved() / 1e9
+        total = torch.cuda.get_device_properties(0).total_memory / 1e9
+        free = total - allocated
+        print(f"   💾 Total GPU Memory: {total:.2f}GB")
+        print(f"   💾 Allocated: {allocated:.2f}GB ({allocated/total*100:.1f}%)")
+        print(f"   💾 Reserved: {reserved:.2f}GB ({reserved/total*100:.1f}%)")
+        print(f"   💾 Free: {free:.2f}GB ({free/total*100:.1f}%)")
+    else:
+        print("   ❌ No CUDA available")
+    print("=" * 50)
+
+def debug_model_tensors(model, stage="Unknown"):
+    """Debug model tensor states in detail"""
+    print(f"\n🕵️ === MODEL TENSOR DEBUG - {stage} ===")
+    
+    if model is None:
+        print("   ❌ Model is None!")
+        return
+    
+    meta_params = []
+    meta_buffers = []
+    working_params = []
+    working_buffers = []
+    device_counts = {}
+    
+    # Check all parameters
+    total_params = 0
+    for name, param in model.named_parameters():
+        total_params += 1
+        device_type = param.device.type
+        device_counts[device_type] = device_counts.get(device_type, 0) + 1
+        
+        if param.device.type == 'meta':
+            meta_params.append(name)
+        else:
+            working_params.append((name, param.device, param.shape, param.dtype))
+    
+    # Check all buffers
+    total_buffers = 0
+    for name, buffer in model.named_buffers():
+        total_buffers += 1
+        device_type = buffer.device.type
+        device_counts[device_type] = device_counts.get(device_type, 0) + 1
+        
+        if buffer.device.type == 'meta':
+            meta_buffers.append(name)
+        else:
+            working_buffers.append((name, buffer.device, buffer.shape, buffer.dtype))
+    
+    print(f"   📊 Total Parameters: {total_params}")
+    print(f"   📊 Total Buffers: {total_buffers}")
+    print(f"   📊 Device Distribution: {device_counts}")
+    print(f"   ⚠️ Meta Parameters: {len(meta_params)}")
+    print(f"   ⚠️ Meta Buffers: {len(meta_buffers)}")
+    print(f"   ✅ Working Parameters: {len(working_params)}")
+    print(f"   ✅ Working Buffers: {len(working_buffers)}")
+    
+    if meta_params:
+        print(f"   🔍 First 5 Meta Parameters: {meta_params[:5]}")
+    if meta_buffers:
+        print(f"   🔍 First 5 Meta Buffers: {meta_buffers[:5]}")
+    
+    if working_params:
+        devices = set([str(device) for _, device, _, _ in working_params])
+        print(f"   🔍 Working Parameter Devices: {devices}")
+    
+    print("=" * 50)
+    return len(meta_params) + len(meta_buffers)
+
+def debug_inference_inputs(input_ids, image_tensor, stage="Unknown"):
+    """Debug inference inputs"""
+    print(f"\n🔬 === INFERENCE INPUT DEBUG - {stage} ===")
+    
+    if input_ids is not None:
+        print(f"   📝 input_ids shape: {input_ids.shape}")
+        print(f"   📝 input_ids device: {input_ids.device}")
+        print(f"   📝 input_ids dtype: {input_ids.dtype}")
+    else:
+        print("   ❌ input_ids is None!")
+    
+    if image_tensor is not None:
+        print(f"   🖼️ image_tensor shape: {image_tensor.shape}")
+        print(f"   🖼️ image_tensor device: {image_tensor.device}")
+        print(f"   🖼️ image_tensor dtype: {image_tensor.dtype}")
+    else:
+        print("   ❌ image_tensor is None!")
+    
+    print("=" * 50)
+
+def debug_tensor_operation(tensor, operation_name):
+    """Debug individual tensor operations"""
+    print(f"🔬 {operation_name}:")
+    if tensor is not None:
+        print(f"   Shape: {tensor.shape}, Device: {tensor.device}, Dtype: {tensor.dtype}")
+        if tensor.device.type == 'meta':
+            print(f"   ⚠️ WARNING: Tensor is on meta device!")
+        return True
+    else:
+        print(f"   ❌ Tensor is None!")
+        return False
+
 def getMessage(prompt, image=None, args=None):
     if "llama" in args.model_path or "Llama" in args.model_path:
         message = [
@@ -64,14 +175,30 @@ def vlm_inference_with_timeout(text=None, images=None, sys_message=None, process
     """VLM inference with timeout protection"""
     print(f"🤖 Starting VLM inference (timeout: {timeout}s)...")
     
+    # === DEBUG: Check inputs before inference ===
+    print(f"🔍 DEBUG: Input validation")
+    print(f"   - Model: {type(model).__name__ if model else 'None'}")
+    print(f"   - Processor: {type(processor).__name__ if processor else 'None'}")
+    print(f"   - Tokenizer: {type(tokenizer).__name__ if tokenizer else 'None'}")
+    print(f"   - Images: {images if isinstance(images, str) else 'Non-string'}")
+    print(f"   - Text length: {len(text) if text else 0}")
+    print(f"   - Args model_path: {args.model_path if args else 'None'}")
+    
+    # === DEBUG: Check model state before inference ===
+    if model is not None:
+        debug_model_tensors(model, "Before VLM Inference")
+        debug_gpu_memory("Before VLM Inference")
+    
     # Set up timeout
     signal.signal(signal.SIGALRM, timeout_handler)
     signal.alarm(timeout)
     
     try:
+        print("🚀 Calling vlm_inference...")
         result = vlm_inference(text, images, sys_message, processor, model, tokenizer, args)
         signal.alarm(0)  # Cancel timeout
         print("✅ VLM inference completed successfully")
+        print(f"   Result length: {len(result) if result else 0}")
         return result
     except TimeoutError:
         print(f"⚠️ VLM inference timed out after {timeout}s")
@@ -79,6 +206,16 @@ def vlm_inference_with_timeout(text=None, images=None, sys_message=None, process
     except Exception as e:
         signal.alarm(0)  # Cancel timeout
         print(f"❌ VLM inference error: {str(e)}")
+        print(f"❌ Error type: {type(e).__name__}")
+        
+        # === DEBUG: Detailed error analysis ===
+        if "meta tensor" in str(e).lower():
+            print("🕵️ META TENSOR ERROR DETECTED!")
+            if model is not None:
+                debug_model_tensors(model, "After Meta Tensor Error")
+        
+        import traceback
+        print(f"❌ Full traceback:\n{traceback.format_exc()}")
         return f"Unable to generate response due to error: {str(e)}"
     finally:
         signal.alarm(0)  # Ensure timeout is cancelled
@@ -88,75 +225,135 @@ def vlm_inference_with_timeout(text=None, images=None, sys_message=None, process
         gc.collect()
 
 def vlm_inference(text=None, images=None, sys_message=None, processor=None, model=None, tokenizer=None, args=None):
+    print(f"🔬 === VLM_INFERENCE DEBUG START ===")
+    print(f"   Model type: {args.model_path}")
+    
+    if "llama" in args.model_path or "Llama" in args.model_path:
+        print(f"🔬 Processing LLAMA model...")
+        image = Image.open(images).convert('RGB')
+        message = getMessage(text, args=args)
+        input_text = processor.apply_chat_template(message, add_generation_prompt=True)
+        inputs = processor(
+            image,
+            input_text,
+            add_special_tokens=False,
+            return_tensors="pt"
+        ).to(model.device)
+
+        output = model.generate(**inputs, max_new_tokens=2048)
+
+        output_text = processor.decode(output[0])
+
         if "llama" in args.model_path or "Llama" in args.model_path:
-            image = Image.open(images).convert('RGB')
-            message = getMessage(text, args=args)
-            input_text = processor.apply_chat_template(message, add_generation_prompt=True)
-            inputs = processor(
-                image,
-                input_text,
-                add_special_tokens=False,
-                return_tensors="pt"
-            ).to(model.device)
+            output_text = re.findall(r'<\|start_header_id\|>assistant<\|end_header_id\|>(.*?)<\|eot_id\|>', output_text, re.DOTALL)[0].strip()
+        return output_text
+    
+    elif "qwen" in args.model_path or "Qwen" in args.model_path:
+        print(f"🔬 Processing QWEN model...")
+        message = getMessage(text, image=images, args=args)
+        text = processor.apply_chat_template(
+            message, tokenize=False, add_generation_prompt=True
+        )
+        image_inputs, video_inputs = process_vision_info(message)
+        inputs = processor(
+            text=[text],
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
+            return_tensors="pt",
+        ).to(model.device)
+        generated_ids = model.generate(**inputs, max_new_tokens=128)
+        generated_ids_trimmed = [
+            out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+        ]
+        output_text = processor.batch_decode(
+            generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )
+        return output_text[0]
 
-            output = model.generate(**inputs, max_new_tokens=2048)
-
-            output_text = processor.decode(output[0])
-
-            if "llama" in args.model_path or "Llama" in args.model_path:
-                output_text = re.findall(r'<\|start_header_id\|>assistant<\|end_header_id\|>(.*?)<\|eot_id\|>', output_text, re.DOTALL)[0].strip()
-            return output_text
+    elif "llava" in args.model_path:
+        print(f"🔬 === LLAVA PROCESSING DEBUG ===")
         
-        elif "qwen" in args.model_path or "Qwen" in args.model_path:
-            message = getMessage(text, image=images, args=args)
-            text = processor.apply_chat_template(
-                message, tokenize=False, add_generation_prompt=True
-            )
-            image_inputs, video_inputs = process_vision_info(message)
-            inputs = processor(
-                text=[text],
-                images=image_inputs,
-                videos=video_inputs,
-                padding=True,
-                return_tensors="pt",
-            ).to(model.device)
-            generated_ids = model.generate(**inputs, max_new_tokens=128)
-            generated_ids_trimmed = [
-                out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-            ]
-            output_text = processor.batch_decode(
-                generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-            )
-            return output_text[0]
-
-        elif "llava" in args.model_path:
-            conv_mode = "mistral_instruct"
-            image_token_se = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
-            if IMAGE_PLACEHOLDER in text:
-                if model.config.mm_use_im_start_end:
-                    text = re.sub(IMAGE_PLACEHOLDER, image_token_se, text)
-                else:
-                    text = re.sub(IMAGE_PLACEHOLDER, DEFAULT_IMAGE_TOKEN, text)
+        # === DEBUG: Check model state at start ===
+        debug_model_tensors(model, "Start of LLaVA Inference")
+        
+        print(f"🔬 Step 1: Setting up conversation...")
+        conv_mode = "mistral_instruct"
+        image_token_se = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
+        print(f"   conv_mode: {conv_mode}")
+        print(f"   image_token_se: {image_token_se}")
+        
+        if IMAGE_PLACEHOLDER in text:
+            print(f"🔬 IMAGE_PLACEHOLDER found in text")
+            if model.config.mm_use_im_start_end:
+                text = re.sub(IMAGE_PLACEHOLDER, image_token_se, text)
+                print(f"   Replaced with image_token_se")
             else:
-                if model.config.mm_use_im_start_end:
-                    text = image_token_se + "\n" + text
-                else:
-                    text = DEFAULT_IMAGE_TOKEN + "\n" + text
+                text = re.sub(IMAGE_PLACEHOLDER, DEFAULT_IMAGE_TOKEN, text)
+                print(f"   Replaced with DEFAULT_IMAGE_TOKEN")
+        else:
+            print(f"🔬 No IMAGE_PLACEHOLDER, adding token to start")
+            if model.config.mm_use_im_start_end:
+                text = image_token_se + "\n" + text
+                print(f"   Added image_token_se at start")
+            else:
+                text = DEFAULT_IMAGE_TOKEN + "\n" + text
+                print(f"   Added DEFAULT_IMAGE_TOKEN at start")
 
-            conv = conv_templates[conv_mode].copy()
-            conv.append_message(conv.roles[0], text)
-            conv.append_message(conv.roles[1], None)
-            prompt = conv.get_prompt()
+        print(f"🔬 Step 2: Creating conversation...")
+        conv = conv_templates[conv_mode].copy()
+        conv.append_message(conv.roles[0], text)
+        conv.append_message(conv.roles[1], None)
+        prompt = conv.get_prompt()
+        print(f"   Prompt length: {len(prompt)}")
+        print(f"   First 100 chars: {prompt[:100]}...")
 
-            input_ids = tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
+        print(f"🔬 Step 3: Tokenizing...")
+        try:
+            input_ids = tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt')
+            debug_tensor_operation(input_ids, "Raw input_ids")
+            
+            input_ids = input_ids.unsqueeze(0)
+            debug_tensor_operation(input_ids, "Unsqueezed input_ids")
+            
+            input_ids = input_ids.cuda()
+            debug_tensor_operation(input_ids, "CUDA input_ids")
+        except Exception as e:
+            print(f"❌ Error in tokenization: {e}")
+            raise e
+            
+        print(f"🔬 Step 4: Processing image...")
+        try:
             image = Image.open(images).convert('RGB')
-
+            print(f"   Image mode: {image.mode}, size: {image.size}")
+            
             image_tensor = process_images([image], processor, model.config)[0]
+            debug_tensor_operation(image_tensor, "Raw image_tensor")
+            
+            image_tensor_unsqueezed = image_tensor.unsqueeze(0)
+            debug_tensor_operation(image_tensor_unsqueezed, "Unsqueezed image_tensor")
+            
+            image_tensor_half = image_tensor_unsqueezed.half()
+            debug_tensor_operation(image_tensor_half, "Half precision image_tensor")
+            
+            image_tensor_cuda = image_tensor_half.cuda()
+            debug_tensor_operation(image_tensor_cuda, "CUDA image_tensor")
+            
+        except Exception as e:
+            print(f"❌ Error in image processing: {e}")
+            raise e
 
+        # === DEBUG: Check inputs before generation ===
+        debug_inference_inputs(input_ids, image_tensor_cuda, "Before Generation")
+        debug_gpu_memory("Before Generation")
+        
+        print(f"🔬 Step 5: Model generation...")
+        try:
             with torch.inference_mode():
+                print(f"   Starting model.generate...")
                 output_ids = model.generate(
                     input_ids,
-                    images=image_tensor.unsqueeze(0).half().cuda(),
+                    images=image_tensor_cuda,
                     image_sizes=[image.size],
                     do_sample=True,
                     temperature=0.2,
@@ -166,35 +363,52 @@ def vlm_inference(text=None, images=None, sys_message=None, processor=None, mode
                     use_cache=True,
                     pad_token_id = tokenizer.eos_token_id,
                 )
+                print(f"   Generation completed!")
+                debug_tensor_operation(output_ids, "Generated output_ids")
+        except Exception as e:
+            print(f"❌ Error in model generation: {e}")
+            print(f"❌ Error type: {type(e).__name__}")
+            if "meta tensor" in str(e).lower():
+                print(f"🚨 META TENSOR ERROR DETECTED!")
+                debug_model_tensors(model, "During Generation Error")
+            raise e
 
+        print(f"🔬 Step 6: Decoding output...")
+        try:
             outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+            print(f"   Decoded output length: {len(outputs)}")
+            print(f"   First 100 chars: {outputs[:100]}...")
             return outputs
+        except Exception as e:
+            print(f"❌ Error in decoding: {e}")
+            raise e
                     
-        elif "gpt" in args.model_path:
-            PROMPT_MESSAGES = [
-                {
-                    "role": "user",
-                    "content": [
-                        *map(lambda x: {"image": x, "resize": 768}, images),
-                        text,
-                    ],
-                },
-            ]
-            if sys_message is not None:
-                sys_message_dict = {
-                    "role": "system",
-                    "content": sys_message
-                }
-                PROMPT_MESSAGES.append(sys_message_dict)
-            params = {
-                "model": "gpt-4o-2024-11-20",
-                "messages": PROMPT_MESSAGES,
-                "max_tokens": 400,
+    elif "gpt" in args.model_path:
+        print(f"🔬 Processing GPT model...")
+        PROMPT_MESSAGES = [
+            {
+                "role": "user",
+                "content": [
+                    *map(lambda x: {"image": x, "resize": 768}, images),
+                    text,
+                ],
+            },
+        ]
+        if sys_message is not None:
+            sys_message_dict = {
+                "role": "system",
+                "content": sys_message
             }
+            PROMPT_MESSAGES.append(sys_message_dict)
+        params = {
+            "model": "gpt-4o-2024-11-20",
+            "messages": PROMPT_MESSAGES,
+            "max_tokens": 400,
+        }
 
-            result = client.chat.completions.create(**params)
+        result = client.chat.completions.create(**params)
 
-            return result.choices[0].message.content
+        return result.choices[0].message.content
 
 def SceneDescription(obs_images, processor=None, model=None, tokenizer=None, args=None):
     print("📝 Generating scene description...")
@@ -290,7 +504,8 @@ if __name__ == '__main__':
     parser.add_argument("--method", type=str, default='openemma')
     args = parser.parse_args()
 
-    print(f"{args.model_path}")
+    print(f"🚀 Starting model loading for: {args.model_path}")
+    debug_gpu_memory("Before Model Loading")
 
     model = None
     processor = None
@@ -299,7 +514,9 @@ if __name__ == '__main__':
     try:
         # 优先本地加载Qwen2.5-VL-3B-Instruct，并优选flash attention
         if "qwen" in args.model_path or "Qwen" in args.model_path:
+            print(f"🔬 === QWEN MODEL LOADING ===")
             try:
+                print(f"🔬 Attempting Qwen2.5-VL-3B-Instruct...")
                 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
                     "/root/OpenEMMA/models/Qwen2.5-VL-3B-Instruct",
                     torch_dtype=torch.bfloat16,
@@ -309,10 +526,12 @@ if __name__ == '__main__':
                 processor = AutoProcessor.from_pretrained("/root/OpenEMMA/models/Qwen2.5-VL-3B-Instruct")
                 tokenizer = None
                 qwen25_loaded = True
-                print("已本地加载 Qwen2.5-VL-3B-Instruct 并启用 flash attention。")
+                print("✅ Qwen2.5-VL-3B-Instruct loaded successfully!")
+                debug_model_tensors(model, "After Qwen2.5 Loading")
+                debug_gpu_memory("After Qwen2.5 Loading")
             except Exception as e:
-                print("Qwen2.5-VL-3B-Instruct 加载失败，尝试加载 Qwen2-VL-7B-Instruct。")
-                print(e)
+                print(f"❌ Qwen2.5-VL-3B-Instruct loading failed: {e}")
+                print(f"🔬 Attempting Qwen2-VL-7B-Instruct...")
                 model = Qwen2VLForConditionalGeneration.from_pretrained(
                     "Qwen/Qwen2-VL-7B-Instruct",
                     torch_dtype=torch.bfloat16,
@@ -321,22 +540,61 @@ if __name__ == '__main__':
                 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
                 tokenizer = None
                 qwen25_loaded = False
-                print("已加载 Qwen2-VL-7B-Instruct。")
+                print("✅ Qwen2-VL-7B-Instruct loaded successfully!")
+                debug_model_tensors(model, "After Qwen2 Loading")
+                debug_gpu_memory("After Qwen2 Loading")
         else:
-            if "llava" == args.model_path:    
+            if "llava" == args.model_path:
+                print(f"🔬 === LLAVA MODEL LOADING (DEFAULT) ===")
+                print(f"🔬 Disabling torch init...")
                 disable_torch_init()
+                print(f"🔬 Loading liuhaotian/llava-v1.6-mistral-7b...")
                 tokenizer, model, processor, context_len = load_pretrained_model("liuhaotian/llava-v1.6-mistral-7b", None, "llava-v1.6-mistral-7b")
                 image_token_se = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
+                print(f"✅ LLaVA model loaded successfully!")
+                print(f"   Context length: {context_len}")
+                print(f"   Image token sequence: {image_token_se}")
+                debug_model_tensors(model, "After LLaVA Loading")
+                debug_gpu_memory("After LLaVA Loading")
             elif "llava" in args.model_path:
+                print(f"🔬 === LLAVA MODEL LOADING (CUSTOM PATH) ===")
+                print(f"🔬 Model path: {args.model_path}")
+                print(f"🔬 Disabling torch init...")
                 disable_torch_init()
+                print(f"🔬 Loading custom LLaVA model...")
                 tokenizer, model, processor, context_len = load_pretrained_model(args.model_path, None, "llava-v1.6-mistral-7b")
                 image_token_se = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
+                print(f"✅ Custom LLaVA model loaded successfully!")
+                print(f"   Context length: {context_len}")
+                debug_model_tensors(model, "After Custom LLaVA Loading")
+                debug_gpu_memory("After Custom LLaVA Loading")
             else:
+                print(f"🔬 === NO MODEL LOADING (GPT MODE) ===")
                 model = None
                 processor = None
                 tokenizer=None
     except Exception as e:
+        print(f"❌ === MODEL LOADING EXCEPTION ===")
+        print(f"❌ Exception type: {type(e).__name__}")
+        print(f"❌ Exception message: {str(e)}")
+        import traceback
+        print(f"❌ Full traceback:\n{traceback.format_exc()}")
         print("模型加载出现异常：", e)
+
+    # === FINAL MODEL VALIDATION ===
+    print(f"\n🎯 === FINAL MODEL VALIDATION ===")
+    print(f"   Model: {type(model).__name__ if model else 'None'}")
+    print(f"   Processor: {type(processor).__name__ if processor else 'None'}")
+    print(f"   Tokenizer: {type(tokenizer).__name__ if tokenizer else 'None'}")
+    
+    if model is not None:
+        meta_count = debug_model_tensors(model, "Final Model State")
+        if meta_count > 0:
+            print(f"⚠️ WARNING: {meta_count} meta tensors detected in final model!")
+        else:
+            print(f"✅ No meta tensors detected - model should work!")
+    
+    debug_gpu_memory("After All Model Loading")
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     timestamp = args.model_path + f"_results/{args.method}/" + timestamp
