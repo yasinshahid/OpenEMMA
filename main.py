@@ -21,7 +21,7 @@ from scipy.integrate import cumulative_trapezoid
 import json
 from openemma.YOLO3D.inference import yolo3d_nuScenes
 from utils import EstimateCurvatureFromTrajectory, IntegrateCurvatureForPoints, OverlayTrajectory, WriteImageSequenceToVideo
-from transformers import MllamaForConditionalGeneration, AutoProcessor, Qwen2VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration, AutoTokenizer
+from transformers import MllamaForConditionalGeneration, AutoProcessor, Qwen2VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration, AutoTokenizer, BitsAndBytesConfig
 from PIL import Image
 from qwen_vl_utils import process_vision_info
 from llava.model.builder import load_pretrained_model
@@ -35,6 +35,54 @@ client = OpenAI(api_key="[your-openai-api-key]")
 OBS_LEN = 10
 FUT_LEN = 10
 TTL_LEN = OBS_LEN + FUT_LEN
+
+# ==========================
+# COLAB QUANTIZATION CONFIG
+# ==========================
+
+def get_colab_quantization_config(quantize_mode="4bit"):
+    """
+    Create quantization configuration optimized for Google Colab
+    """
+    if quantize_mode == "none":
+        return None
+    elif quantize_mode == "8bit":
+        print("🔧 Using 8-bit quantization for Colab")
+        return BitsAndBytesConfig(
+            load_in_8bit=True,
+            llm_int8_enable_fp32_cpu_offload=True  # Colab-friendly CPU offload
+        )
+    elif quantize_mode == "4bit":
+        print("🔧 Using 4-bit quantization for Colab (maximum memory savings)")
+        return BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_use_double_quant=True,  # Double quantization for extra savings
+            bnb_4bit_quant_type="nf4",       # NF4 is optimal for neural networks
+            bnb_4bit_compute_dtype=torch.bfloat16,  # Colab T4 supports bfloat16
+        )
+    else:
+        raise ValueError(f"Unknown quantization mode: {quantize_mode}")
+
+def optimize_for_colab():
+    """Apply Colab-specific optimizations"""
+    print("🚀 Applying Google Colab optimizations...")
+    
+    # Clear GPU cache
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+    
+    # Enable memory-efficient attention if available
+    try:
+        torch.backends.cuda.enable_flash_sdp(True)
+        print("   ✅ Flash Attention enabled")
+    except:
+        print("   ⚠️ Flash Attention not available")
+    
+    # Set memory fraction for Colab T4 (15GB)
+    if torch.cuda.is_available():
+        torch.cuda.set_per_process_memory_fraction(0.95)  # Use 95% of available memory
+        print("   ✅ GPU memory fraction set to 95%")
 
 # ==========================
 # DEBUGGING FUNCTIONS
@@ -502,9 +550,25 @@ if __name__ == '__main__':
     parser.add_argument("--dataroot", type=str, default='datasets/NuScenes')
     parser.add_argument("--version", type=str, default='v1.0-mini')
     parser.add_argument("--method", type=str, default='openemma')
+    parser.add_argument("--quantize", type=str, default="4bit", choices=["none", "8bit", "4bit"], 
+                        help="Quantization mode for Colab memory optimization")
+    parser.add_argument("--colab-mode", action="store_true", default=True,
+                        help="Enable Colab-specific optimizations")
     args = parser.parse_args()
 
     print(f"🚀 Starting model loading for: {args.model_path}")
+    
+    # Apply Colab optimizations if enabled
+    if args.colab_mode:
+        optimize_for_colab()
+    
+    # Get quantization config
+    quantization_config = get_colab_quantization_config(args.quantize)
+    if quantization_config:
+        print(f"📦 Quantization enabled: {args.quantize}")
+    else:
+        print(f"📦 No quantization (full precision)")
+    
     debug_gpu_memory("Before Model Loading")
 
     model = None
@@ -517,11 +581,20 @@ if __name__ == '__main__':
             print(f"🔬 === QWEN MODEL LOADING ===")
             try:
                 print(f"🔬 Attempting Qwen2.5-VL-3B-Instruct...")
+                model_kwargs = {
+                    "torch_dtype": torch.bfloat16,
+                    "attn_implementation": "flash_attention_2",
+                    "device_map": "auto"
+                }
+                
+                # Add quantization config for Colab
+                if quantization_config is not None:
+                    model_kwargs["quantization_config"] = quantization_config
+                    print(f"   🔧 Using {args.quantize} quantization for memory efficiency")
+                
                 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
                     "/root/OpenEMMA/models/Qwen2.5-VL-3B-Instruct",
-                    torch_dtype=torch.bfloat16,
-                    attn_implementation="flash_attention_2",
-                    device_map="auto"
+                    **model_kwargs
                 )
                 processor = AutoProcessor.from_pretrained("/root/OpenEMMA/models/Qwen2.5-VL-3B-Instruct")
                 tokenizer = None
@@ -532,10 +605,20 @@ if __name__ == '__main__':
             except Exception as e:
                 print(f"❌ Qwen2.5-VL-3B-Instruct loading failed: {e}")
                 print(f"🔬 Attempting Qwen2-VL-7B-Instruct...")
+                
+                model_kwargs = {
+                    "torch_dtype": torch.bfloat16,
+                    "device_map": "auto"
+                }
+                
+                # Add quantization config for Colab
+                if quantization_config is not None:
+                    model_kwargs["quantization_config"] = quantization_config
+                    print(f"   🔧 Using {args.quantize} quantization for Qwen2-VL-7B")
+                
                 model = Qwen2VLForConditionalGeneration.from_pretrained(
                     "Qwen/Qwen2-VL-7B-Instruct",
-                    torch_dtype=torch.bfloat16,
-                    device_map="auto"
+                    **model_kwargs
                 )
                 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
                 tokenizer = None
@@ -549,7 +632,23 @@ if __name__ == '__main__':
                 print(f"🔬 Disabling torch init...")
                 disable_torch_init()
                 print(f"🔬 Loading liuhaotian/llava-v1.6-mistral-7b...")
-                tokenizer, model, processor, context_len = load_pretrained_model("liuhaotian/llava-v1.6-mistral-7b", None, "llava-v1.6-mistral-7b")
+                
+                # Configure LLaVA quantization for Colab
+                load_8bit = args.quantize == "8bit"
+                load_4bit = args.quantize == "4bit"
+                if load_4bit:
+                    print(f"   🔧 Using 4-bit quantization for LLaVA")
+                elif load_8bit:
+                    print(f"   🔧 Using 8-bit quantization for LLaVA")
+                
+                tokenizer, model, processor, context_len = load_pretrained_model(
+                    "liuhaotian/llava-v1.6-mistral-7b", 
+                    None, 
+                    "llava-v1.6-mistral-7b",
+                    load_8bit=load_8bit,
+                    load_4bit=load_4bit,
+                    use_flash_attn=True  # Enable for Colab
+                )
                 image_token_se = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
                 print(f"✅ LLaVA model loaded successfully!")
                 print(f"   Context length: {context_len}")
@@ -562,7 +661,23 @@ if __name__ == '__main__':
                 print(f"🔬 Disabling torch init...")
                 disable_torch_init()
                 print(f"🔬 Loading custom LLaVA model...")
-                tokenizer, model, processor, context_len = load_pretrained_model(args.model_path, None, "llava-v1.6-mistral-7b")
+                
+                # Configure LLaVA quantization for Colab
+                load_8bit = args.quantize == "8bit"
+                load_4bit = args.quantize == "4bit"
+                if load_4bit:
+                    print(f"   🔧 Using 4-bit quantization for custom LLaVA")
+                elif load_8bit:
+                    print(f"   🔧 Using 8-bit quantization for custom LLaVA")
+                
+                tokenizer, model, processor, context_len = load_pretrained_model(
+                    args.model_path, 
+                    None, 
+                    "llava-v1.6-mistral-7b",
+                    load_8bit=load_8bit,
+                    load_4bit=load_4bit,
+                    use_flash_attn=True  # Enable for Colab
+                )
                 image_token_se = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
                 print(f"✅ Custom LLaVA model loaded successfully!")
                 print(f"   Context length: {context_len}")
