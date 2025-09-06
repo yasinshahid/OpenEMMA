@@ -577,7 +577,7 @@ if __name__ == '__main__':
     qwen25_loaded = False
     try:
         # 优先本地加载Qwen2.5-VL-3B-Instruct，并优选flash attention
-        if "qwen" in args.model_path or "Qwen" in args.model_path:
+        if "qwen" in args.model_path.lower() or "Qwen" in args.model_path:
             print(f"🔬 === QWEN MODEL LOADING ===")
             try:
                 print(f"🔬 Attempting Qwen2.5-VL-3B-Instruct...")
@@ -626,8 +626,9 @@ if __name__ == '__main__':
                 print("✅ Qwen2-VL-7B-Instruct loaded successfully!")
                 debug_model_tensors(model, "After Qwen2 Loading")
                 debug_gpu_memory("After Qwen2 Loading")
-        else:
-            if "llava" == args.model_path:
+        elif "llava" in args.model_path.lower() or args.model_path == "llava":
+            # Handle both exact match and substring match for LLaVA
+            if args.model_path == "llava":
                 print(f"🔬 === LLAVA MODEL LOADING (DEFAULT) ===")
                 print(f"🔬 Disabling torch init...")
                 disable_torch_init()
@@ -655,7 +656,7 @@ if __name__ == '__main__':
                 print(f"   Image token sequence: {image_token_se}")
                 debug_model_tensors(model, "After LLaVA Loading")
                 debug_gpu_memory("After LLaVA Loading")
-            elif "llava" in args.model_path:
+            else:
                 print(f"🔬 === LLAVA MODEL LOADING (CUSTOM PATH) ===")
                 print(f"🔬 Model path: {args.model_path}")
                 print(f"🔬 Disabling torch init...")
@@ -683,11 +684,41 @@ if __name__ == '__main__':
                 print(f"   Context length: {context_len}")
                 debug_model_tensors(model, "After Custom LLaVA Loading")
                 debug_gpu_memory("After Custom LLaVA Loading")
-            else:
-                print(f"🔬 === NO MODEL LOADING (GPT MODE) ===")
-                model = None
-                processor = None
-                tokenizer=None
+        elif args.model_path == "gpt":
+            print(f"🔬 === NO MODEL LOADING (GPT MODE) ===")
+            model = None
+            processor = None
+            tokenizer = None
+        else:
+            # Default fallback to LLaVA for any unrecognized model path
+            print(f"🔬 === UNKNOWN MODEL PATH: '{args.model_path}' ===")
+            print(f"🔬 Falling back to default LLaVA model...")
+            print(f"🔬 Disabling torch init...")
+            disable_torch_init()
+            print(f"🔬 Loading liuhaotian/llava-v1.6-mistral-7b...")
+            
+            # Configure LLaVA quantization for Colab
+            load_8bit = args.quantize == "8bit"
+            load_4bit = args.quantize == "4bit"
+            if load_4bit:
+                print(f"   🔧 Using 4-bit quantization for fallback LLaVA")
+            elif load_8bit:
+                print(f"   🔧 Using 8-bit quantization for fallback LLaVA")
+            
+            tokenizer, model, processor, context_len = load_pretrained_model(
+                "liuhaotian/llava-v1.6-mistral-7b", 
+                None, 
+                "llava-v1.6-mistral-7b",
+                load_8bit=load_8bit,
+                load_4bit=load_4bit,
+                use_flash_attn=True  # Enable for Colab
+            )
+            image_token_se = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
+            print(f"✅ Fallback LLaVA model loaded successfully!")
+            print(f"   Context length: {context_len}")
+            print(f"   Image token sequence: {image_token_se}")
+            debug_model_tensors(model, "After Fallback LLaVA Loading")
+            debug_gpu_memory("After Fallback LLaVA Loading")
     except Exception as e:
         print(f"❌ === MODEL LOADING EXCEPTION ===")
         print(f"❌ Exception type: {type(e).__name__}")
@@ -701,6 +732,22 @@ if __name__ == '__main__':
     print(f"   Model: {type(model).__name__ if model else 'None'}")
     print(f"   Processor: {type(processor).__name__ if processor else 'None'}")
     print(f"   Tokenizer: {type(tokenizer).__name__ if tokenizer else 'None'}")
+    
+    # Critical check: Stop execution if model is None
+    if model is None:
+        print(f"\n❌ === CRITICAL ERROR: NO MODEL LOADED ===")
+        print(f"❌ Model path provided: '{args.model_path}'")
+        print(f"❌ Model loading failed - cannot continue with inference")
+        print(f"❌ Please check:")
+        print(f"   1. Model path is correct ('llava' for default LLaVA)")
+        print(f"   2. Model files are available")
+        print(f"   3. Dependencies are installed")
+        print(f"   4. GPU memory is sufficient")
+        print(f"\n💡 Suggested fixes:")
+        print(f"   - Use: --model_path llava (for LLaVA)")
+        print(f"   - Use: --model_path qwen (for Qwen)")  
+        print(f"   - Try: --quantize 4bit (for memory issues)")
+        exit(1)
     
     if model is not None:
         meta_count = debug_model_tensors(model, "Final Model State")
