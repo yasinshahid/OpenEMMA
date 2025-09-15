@@ -50,7 +50,7 @@ def getMessage(prompt, image=None, args=None):
     return message
 
 
-def vlm_inference(text=None, images=None, sys_message=None, processor=None, model=None, tokenizer=None, args=None):
+def vlm_inference(text=None, images=None, sys_message=None, processor=None, model=None, tokenizer=None, args=None, vlog=None):
         if "llama" in args.model_path or "Llama" in args.model_path:
             image = Image.open(images).convert('RGB')
             message = getMessage(text, args=args)
@@ -159,24 +159,37 @@ def vlm_inference(text=None, images=None, sys_message=None, processor=None, mode
 
             return result.choices[0].message.content
 
-def SceneDescription(obs_images, processor=None, model=None, tokenizer=None, args=None):
+def SceneDescription(obs_images, processor=None, model=None, tokenizer=None, args=None, vlog=None):
+    if vlog is None:
+        vlog = lambda x, level="INFO": None  # No-op if no vlog function provided
+        
+    vlog("Generating scene description...")
     prompt = f"""You are a autonomous driving labeller. You have access to these front-view camera images of a car taken at a 0.5 second interval over the past 5 seconds. Imagine you are driving the car. Describe the driving scene according to traffic lights, movements of other cars or pedestrians and lane markings."""
 
     if "llava" in args.model_path:
         prompt = f"""You are an autonomous driving labeller. You have access to these front-view camera images of a car taken at a 0.5 second interval over the past 5 seconds. Imagine you are driving the car. Provide a concise description of the driving scene according to traffic lights, movements of other cars or pedestrians and lane markings."""
 
     result = vlm_inference(text=prompt, images=obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args)
+    vlog(f"✅ Scene description generated: {result[:100]}..." if len(result) > 100 else f"✅ Scene description: {result}")
     return result
 
-def DescribeObjects(obs_images, processor=None, model=None, tokenizer=None, args=None):
-
+def DescribeObjects(obs_images, processor=None, model=None, tokenizer=None, args=None, vlog=None):
+    if vlog is None:
+        vlog = lambda x, level="INFO": None  # No-op if no vlog function provided
+    
+    vlog("Generating object descriptions...")
     prompt = f"""You are a autonomous driving labeller. You have access to a front-view camera images of a vehicle taken at a 0.5 second interval over the past 5 seconds. Imagine you are driving the car. What other road users should you pay attention to in the driving scene? List two or three of them, specifying its location within the image of the driving scene and provide a short description of the that road user on what it is doing, and why it is important to you."""
 
-    result = vlm_inference(text=prompt, images=obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args)
-
+    result = vlm_inference(text=prompt, images=obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args, vlog=vlog)
+    vlog(f"✅ Object description generated: {result[:100]}..." if len(result) > 100 else f"✅ Object description: {result}")
     return result
 
-def DescribeOrUpdateIntent(obs_images, prev_intent=None, processor=None, model=None, tokenizer=None, args=None):
+def DescribeOrUpdateIntent(obs_images, prev_intent=None, processor=None, model=None, tokenizer=None, args=None, vlog=None):
+    if vlog:
+        if prev_intent is None:
+            vlog("Generating initial intent description...")
+        else:
+            vlog(f"Updating intent description from previous: {prev_intent[:50]}...")
 
     if prev_intent is None:
         prompt = f"""You are a autonomous driving labeller. You have access to a front-view camera images of a vehicle taken at a 0.5 second interval over the past 5 seconds. Imagine you are driving the car. Based on the lane markings and the movement of other cars and pedestrians, describe the desired intent of the ego car. Is it going to follow the lane to turn left, turn right, or go straight? Should it maintain the current speed or slow down or speed up?"""
@@ -190,20 +203,24 @@ def DescribeOrUpdateIntent(obs_images, prev_intent=None, processor=None, model=N
         if "llava" in args.model_path:
             prompt = f"""You are a autonomous driving labeller. You have access to a front-view camera images of a vehicle taken at a 0.5 second interval over the past 5 seconds. Imagine you are driving the car. Half a second ago your intent was to {prev_intent}. Based on the updated lane markings and the updated movement of other cars and pedestrians, do you keep your intent or do you change it? Provide a concise description explanation of your current intent: """
 
-    result = vlm_inference(text=prompt, images=obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args)
+    result = vlm_inference(text=prompt, images=obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args, vlog=vlog)
+
+    if vlog:
+        result_preview = result[:100] + "..." if len(result) > 100 else result
+        vlog(f"✅ Intent description generated: {result_preview}")
 
     return result
 
 
-def GenerateMotion(obs_images, obs_waypoints, obs_velocities, obs_curvatures, given_intent, processor=None, model=None, tokenizer=None, args=None):
+def GenerateMotion(obs_images, obs_waypoints, obs_velocities, obs_curvatures, given_intent, processor=None, model=None, tokenizer=None, args=None, vlog=None):
     # assert len(obs_images) == len(obs_waypoints)
 
     scene_description, object_description, intent_description = None, None, None
 
     if args.method == "openemma":
-        scene_description = SceneDescription(obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args)
-        object_description = DescribeObjects(obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args)
-        intent_description = DescribeOrUpdateIntent(obs_images, prev_intent=given_intent, processor=processor, model=model, tokenizer=tokenizer, args=args)
+        scene_description = SceneDescription(obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args, vlog=vlog)
+        object_description = DescribeObjects(obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args, vlog=vlog)
+        intent_description = DescribeOrUpdateIntent(obs_images, prev_intent=given_intent, processor=processor, model=model, tokenizer=tokenizer, args=args, vlog=vlog)
         print(f'Scene Description: {scene_description}')
         print(f'Object Description: {object_description}')
         print(f'Intent Description: {intent_description}')
@@ -245,7 +262,26 @@ if __name__ == '__main__':
     parser.add_argument("--dataroot", type=str, default='datasets/NuScenes')
     parser.add_argument("--version", type=str, default='v1.0-mini')
     parser.add_argument("--method", type=str, default='openemma')
+    parser.add_argument("--verbose", action="store_true", default=False, 
+                        help="Enable detailed logging for debugging")
     args = parser.parse_args()
+
+    # Verbose logging function
+    def vlog(message, level="INFO"):
+        """Verbose logging function"""
+        if args.verbose:
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            print(f"[{timestamp}] {level}: {message}")
+    
+    vlog("="*60)
+    vlog("OpenEMMA Baseline Evaluation Starting")
+    vlog("="*60)
+    vlog(f"Model path: {args.model_path}")
+    vlog(f"Data root: {args.dataroot}")
+    vlog(f"Version: {args.version}")
+    vlog(f"Method: {args.method}")
+    vlog(f"Plot enabled: {args.plot}")
+    vlog(f"Verbose mode: {args.verbose}")
 
     print(f"{args.model_path}")
 
@@ -253,10 +289,16 @@ if __name__ == '__main__':
     processor = None
     tokenizer = None
     qwen25_loaded = False
+    
+    vlog("Starting model initialization...")
+    vlog(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f}GB" if torch.cuda.is_available() else "No GPU available")
+    
     try:
         # 优先本地加载Qwen2.5-VL-3B-Instruct，并优选flash attention
         if "qwen" in args.model_path or "Qwen" in args.model_path:
+            vlog("Attempting to load Qwen model...")
             try:
+                vlog("Loading Qwen2.5-VL-3B-Instruct from local path...")
                 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
                     "/root/OpenEMMA/models/Qwen2.5-VL-3B-Instruct",
                     torch_dtype=torch.bfloat16,
@@ -266,8 +308,11 @@ if __name__ == '__main__':
                 processor = AutoProcessor.from_pretrained("/root/OpenEMMA/models/Qwen2.5-VL-3B-Instruct")
                 tokenizer = None
                 qwen25_loaded = True
+                vlog("✅ Successfully loaded Qwen2.5-VL-3B-Instruct with flash attention")
                 print("已本地加载 Qwen2.5-VL-3B-Instruct 并启用 flash attention。")
             except Exception as e:
+                vlog(f"❌ Qwen2.5-VL-3B-Instruct loading failed: {str(e)}")
+                vlog("Attempting fallback to Qwen2-VL-7B-Instruct...")
                 print("Qwen2.5-VL-3B-Instruct 加载失败，尝试加载 Qwen2-VL-7B-Instruct。")
                 print(e)
                 model = Qwen2VLForConditionalGeneration.from_pretrained(
@@ -278,52 +323,91 @@ if __name__ == '__main__':
                 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
                 tokenizer = None
                 qwen25_loaded = False
+                vlog("✅ Successfully loaded Qwen2-VL-7B-Instruct as fallback")
                 print("已加载 Qwen2-VL-7B-Instruct。")
         else:
-            if "llava" == args.model_path:    
+            if "llava" == args.model_path:
+                vlog("Loading LLaVA model (default path)...")
+                vlog("Disabling torch init for LLaVA...")
                 disable_torch_init()
+                vlog("Loading liuhaotian/llava-v1.6-mistral-7b...")
                 tokenizer, model, processor, context_len = load_pretrained_model("liuhaotian/llava-v1.6-mistral-7b", None, "llava-v1.6-mistral-7b")
                 image_token_se = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
+                vlog(f"✅ Successfully loaded LLaVA model (context length: {context_len})")
             elif "llava" in args.model_path:
+                vlog(f"Loading custom LLaVA model from path: {args.model_path}")
+                vlog("Disabling torch init for custom LLaVA...")
                 disable_torch_init()
+                vlog(f"Loading custom model: {args.model_path}")
                 tokenizer, model, processor, context_len = load_pretrained_model(args.model_path, None, "llava-v1.6-mistral-7b")
                 image_token_se = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
+                vlog(f"✅ Successfully loaded custom LLaVA model (context length: {context_len})")
             else:
+                vlog(f"No model loading required for model path: {args.model_path}")
                 model = None
                 processor = None
                 tokenizer=None
     except Exception as e:
+        vlog(f"❌ CRITICAL: Model loading failed with exception: {str(e)}", "ERROR")
         print("模型加载出现异常：", e)
 
+    vlog("Setting up output directory...")
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     timestamp = args.model_path + f"_results/{args.method}/" + timestamp
     os.makedirs(timestamp, exist_ok=True)
+    vlog(f"Output directory created: {timestamp}")
 
     # Load the dataset
-    nusc = NuScenes(version=args.version, dataroot=args.dataroot)
+    vlog("Loading NuScenes dataset...")
+    vlog(f"Dataset path: {args.dataroot}")
+    vlog(f"Dataset version: {args.version}")
+    try:
+        nusc = NuScenes(version=args.version, dataroot=args.dataroot)
+        vlog("✅ Successfully loaded NuScenes dataset")
+    except Exception as e:
+        vlog(f"❌ Failed to load NuScenes dataset: {str(e)}", "ERROR")
+        raise e
 
     # Iterate the scenes
     scenes = nusc.scene
+    vlog(f"Found {len(scenes)} scenes in dataset")
     
     print(f"Number of scenes: {len(scenes)}")
 
-    for scene in scenes:
+    for scene_idx, scene in enumerate(scenes):
         token = scene['token']
+        scene_name = scene['name']
+        vlog(f"Processing scene {scene_idx + 1}/{len(scenes)}: {scene_name} (token: {token})")
+        
+        # Add GPU memory check before each scene
+        if torch.cuda.is_available():
+            memory_used = torch.cuda.memory_allocated() / 1e9
+            memory_total = torch.cuda.get_device_properties(0).total_memory / 1e9
+            vlog(f"GPU memory before scene: {memory_used:.2f}/{memory_total:.2f} GB ({memory_used/memory_total*100:.1f}%)")
         first_sample_token = scene['first_sample_token']
         last_sample_token = scene['last_sample_token']
         name = scene['name']
         description = scene['description']
+        vlog(f"Scene details - Name: {name}, Description: {description}")
 
         if not name in ["scene-0103", "scene-1077"]:
+            vlog(f"Skipping scene {name} (not in target scenes)")
             continue
 
+        vlog(f"✅ Processing target scene: {name}")
+        vlog("Collecting camera images and poses...")
+        
         # Get all image and pose in this scene
         front_camera_images = []
         ego_poses = []
         camera_params = []
         curr_sample_token = first_sample_token
+        sample_count = 0
         while True:
             sample = nusc.get('sample', curr_sample_token)
+            sample_count += 1
+            if sample_count % 10 == 0:  # Log every 10 samples
+                vlog(f"Processed {sample_count} samples...")
 
             # Get the front camera image of the sample.
             cam_front_data = nusc.get('sample_data', sample['data']['CAM_FRONT'])
@@ -405,24 +489,34 @@ if __name__ == '__main__':
             curr_image = obs_images[-1]
 
             # obs_images = [curr_image]
+            vlog(f"Processing observation window for step {i+1}/{scene_length - TTL_LEN}")
+            vlog(f"Current image: {curr_image}")
 
             # Allocate the images.
             if "gpt" in args.model_path:
+                vlog("Processing image for GPT model (with YOLO3D)...")
                 img = cv2.imdecode(np.frombuffer(base64.b64decode(curr_image), dtype=np.uint8), cv2.IMREAD_COLOR)
+                vlog("Running YOLO3D inference...")
                 img = yolo3d_nuScenes(img, calib=obs_camera_params[-1])[0]
+                vlog("✅ YOLO3D processing complete")
             else:
+                vlog("Loading image for VLM model...")
                 with open(os.path.join(curr_image), "rb") as image_file:
                     img = cv2.imdecode(np.frombuffer(image_file.read(), dtype=np.uint8), cv2.IMREAD_COLOR)
+                vlog("✅ Image loaded for VLM processing")
 
             for rho in range(3):
+                vlog(f"Motion generation attempt {rho + 1}/3")
                 # Assemble the prompt.
                 if not "gpt" in args.model_path:
                     obs_images = curr_image
+                vlog("Starting motion generation...")
                 (prediction,
                 scene_description,
                 object_description,
                 updated_intent) = GenerateMotion(obs_images, obs_ego_traj_world, obs_ego_velocities,
-                                                obs_ego_curvatures, prev_intent, processor=processor, model=model, tokenizer=tokenizer, args=args)
+                                                obs_ego_curvatures, prev_intent, processor=processor, model=model, tokenizer=tokenizer, args=args, vlog=vlog)
+                vlog(f"✅ Motion generation complete (attempt {rho + 1})")
 
                 # Process the output.
                 prev_intent = updated_intent  # Stateful intent
@@ -451,29 +545,37 @@ if __name__ == '__main__':
                                                                          obs_ego_velocities[-1][0]), pred_len)
 
             # Overlay the trajectory.
+            vlog("Overlaying predicted trajectory on image...")
             check_flag = OverlayTrajectory(img, pred_traj.tolist(), obs_camera_params[-1], obs_ego_poses[-1], color=(255, 0, 0), args=args)
-            
+            vlog(f"Trajectory overlay result: {check_flag}")
 
             # Compute ADE.
+            vlog("Computing Average Displacement Error (ADE)...")
             fut_ego_traj_world = np.array(fut_ego_traj_world)
             ade = np.mean(np.linalg.norm(fut_ego_traj_world[:pred_len] - pred_traj, axis=1))
+            vlog(f"Overall ADE: {ade:.4f}")
             
             pred1_len = min(pred_len, 2)
             ade1s = np.mean(np.linalg.norm(fut_ego_traj_world[:pred1_len] - pred_traj[1:pred1_len+1] , axis=1))
             ade1s_list.append(ade1s)
+            vlog(f"ADE 1s: {ade1s:.4f}")
 
             pred2_len = min(pred_len, 4)
             ade2s = np.mean(np.linalg.norm(fut_ego_traj_world[:pred2_len] - pred_traj[:pred2_len] , axis=1))
             ade2s_list.append(ade2s)
+            vlog(f"ADE 2s: {ade2s:.4f}")
 
             pred3_len = min(pred_len, 6)
             ade3s = np.mean(np.linalg.norm(fut_ego_traj_world[:pred3_len] - pred_traj[:pred3_len] , axis=1))
             ade3s_list.append(ade3s)
+            vlog(f"ADE 3s: {ade3s:.4f}")
 
             # Write to image.
             if args.plot == True:
+                vlog("Saving visualization outputs...")
                 cam_images_sequence.append(img.copy())
                 cv2.imwrite(f"{timestamp}/{name}_{i}_front_cam.jpg", img)
+                vlog(f"Saved camera image: {timestamp}/{name}_{i}_front_cam.jpg")
 
                 # Plot the trajectory.
                 plt.plot(fut_ego_traj_world[:, 0], fut_ego_traj_world[:, 1], 'r-', label='GT')
@@ -482,11 +584,13 @@ if __name__ == '__main__':
                 plt.title(f"Scene: {name}, Frame: {i}, ADE: {ade}")
                 plt.savefig(f"{timestamp}/{name}_{i}_traj.jpg")
                 plt.close()
+                vlog(f"Saved trajectory plot: {timestamp}/{name}_{i}_traj.jpg")
 
                 # Save the trajectory
                 np.save(f"{timestamp}/{name}_{i}_pred_traj.npy", pred_traj)
                 np.save(f"{timestamp}/{name}_{i}_pred_curvatures.npy", pred_curvatures)
                 np.save(f"{timestamp}/{name}_{i}_pred_speeds.npy", pred_speeds)
+                vlog("Saved trajectory data files")
 
                 # Save the descriptions
                 with open(f"{timestamp}/{name}_{i}_logs.txt", 'w') as f:
@@ -494,13 +598,24 @@ if __name__ == '__main__':
                     f.write(f"Object Description: {object_description}\n")
                     f.write(f"Intent Description: {updated_intent}\n")
                     f.write(f"Average Displacement Error: {ade}\n")
+                vlog(f"Saved description logs: {timestamp}/{name}_{i}_logs.txt")
 
             # break  # Timestep
 
+        # Scene completion summary
+        vlog(f"Completed processing scene: {name}")
+        vlog(f"Total timesteps processed: {len(ade1s_list)}")
+        
         mean_ade1s = np.mean(ade1s_list)
         mean_ade2s = np.mean(ade2s_list)
         mean_ade3s = np.mean(ade3s_list)
         aveg_ade = np.mean([mean_ade1s, mean_ade2s, mean_ade3s])
+        
+        vlog(f"Scene {name} results:")
+        vlog(f"  Mean ADE 1s: {mean_ade1s:.4f}")
+        vlog(f"  Mean ADE 2s: {mean_ade2s:.4f}")
+        vlog(f"  Mean ADE 3s: {mean_ade3s:.4f}")
+        vlog(f"  Average ADE: {aveg_ade:.4f}")
 
         result = {
             "name": name,
@@ -511,71 +626,29 @@ if __name__ == '__main__':
             "avgade": aveg_ade
         }
 
+        vlog(f"Saving results to: {timestamp}/ade_results.jsonl")
         with open(f"{timestamp}/ade_results.jsonl", "a") as f:
             f.write(json.dumps(result))
             f.write("\n")
 
         if args.plot:
+            vlog(f"Creating video sequence for scene: {name}")
             WriteImageSequenceToVideo(cam_images_sequence, f"{timestamp}/{name}")
+            vlog(f"✅ Video created: {timestamp}/{name}")
 
         # break  # Scenes
+        vlog(f"🎉 Scene {name} processing complete!")
+        
+        # Add GPU memory cleanup after each scene
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            vlog("GPU cache cleared after scene processing")
 
-
-def vlm_inference(text=None, images=None, sys_message=None, processor=None, model=None, tokenizer=None, args=None):
-    if ("qwen" in args.model_path or "Qwen" in args.model_path):
-        # 判断是否为Qwen2.5-VL-3B-Instruct（新版）
-        if hasattr(model, "model_type") and getattr(model, "model_type", "") == "qwen2_5_vl":
-            # Qwen2.5-VL-3B-Instruct官方推荐推理方式
-            message = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image", "image": images},
-                        {"type": "text", "text": text}
-                    ]
-                }
-            ]
-            text_prompt = processor.apply_chat_template(
-                message, tokenize=False, add_generation_prompt=True
-            )
-            image_inputs, video_inputs = process_vision_info(message)
-            inputs = processor(
-                text=[text_prompt],
-                images=image_inputs,
-                videos=video_inputs,
-                padding=True,
-                return_tensors="pt",
-            )
-            inputs = inputs.to(model.device)
-            generated_ids = model.generate(**inputs, max_new_tokens=128)
-            generated_ids_trimmed = [
-                out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-            ]
-            output_text = processor.batch_decode(
-                generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-            )
-            return output_text[0]
-        else:
-            # 兼容Qwen2-VL-7B-Instruct等老模型
-            message = getMessage(text, image=images, args=args)
-            text_prompt = processor.apply_chat_template(
-                message, tokenize=False, add_generation_prompt=True
-            )
-            image_inputs, video_inputs = process_vision_info(message)
-            inputs = processor(
-                text=[text_prompt],
-                images=image_inputs,
-                videos=video_inputs,
-                padding=True,
-                return_tensors="pt",
-            ).to(model.device)
-            generated_ids = model.generate(**inputs, max_new_tokens=128)
-            generated_ids_trimmed = [
-                out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-            ]
-            output_text = processor.batch_decode(
-                generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-            )
-            return output_text[0]
-    # ... 其它模型推理逻辑保持不变 ...
+    # End of all scene processing
+    vlog("="*60)
+    vlog("🎉 ALL SCENES PROCESSING COMPLETE!")
+    vlog("="*60)
+    vlog(f"Results saved to directory: {timestamp}")
+    vlog("Evaluation completed successfully!")
+    vlog("="*60)
 
