@@ -203,7 +203,7 @@ def DescribeOrUpdateIntent(obs_images, prev_intent=None, processor=None, model=N
         if "llava" in args.model_path:
             prompt = f"""You are a autonomous driving labeller. You have access to a front-view camera images of a vehicle taken at a 0.5 second interval over the past 5 seconds. Imagine you are driving the car. Half a second ago your intent was to {prev_intent}. Based on the updated lane markings and the updated movement of other cars and pedestrians, do you keep your intent or do you change it? Provide a concise description explanation of your current intent: """
 
-    result = vlm_inference(text=prompt, images=obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args)
+    result = vlm_inference(text=prompt, images=obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args, vlog=vlog)
 
     if vlog:
         result_preview = result[:100] + "..." if len(result) > 100 else result
