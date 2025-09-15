@@ -180,7 +180,7 @@ def DescribeObjects(obs_images, processor=None, model=None, tokenizer=None, args
     vlog("Generating object descriptions...")
     prompt = f"""You are a autonomous driving labeller. You have access to a front-view camera images of a vehicle taken at a 0.5 second interval over the past 5 seconds. Imagine you are driving the car. What other road users should you pay attention to in the driving scene? List two or three of them, specifying its location within the image of the driving scene and provide a short description of the that road user on what it is doing, and why it is important to you."""
 
-    result = vlm_inference(text=prompt, images=obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args)
+    result = vlm_inference(text=prompt, images=obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args, vlog=vlog)
     vlog(f"✅ Object description generated: {result[:100]}..." if len(result) > 100 else f"✅ Object description: {result}")
     return result
 
