@@ -262,6 +262,8 @@ if __name__ == '__main__':
     parser.add_argument("--dataroot", type=str, default='datasets/NuScenes')
     parser.add_argument("--version", type=str, default='v1.0-mini')
     parser.add_argument("--method", type=str, default='openemma')
+    parser.add_argument("--max-scenes", type=int, default=None, 
+                        help="Maximum number of scenes to process (default: process all scenes)")
     parser.add_argument("--verbose", action="store_true", default=False, 
                         help="Enable detailed logging for debugging")
     args = parser.parse_args()
@@ -281,6 +283,7 @@ if __name__ == '__main__':
     vlog(f"Version: {args.version}")
     vlog(f"Method: {args.method}")
     vlog(f"Plot enabled: {args.plot}")
+    vlog(f"Max scenes: {args.max_scenes if args.max_scenes else 'All scenes'}")
     vlog(f"Verbose mode: {args.verbose}")
 
     print(f"{args.model_path}")
@@ -371,6 +374,15 @@ if __name__ == '__main__':
     # Iterate the scenes
     scenes = nusc.scene
     vlog(f"Found {len(scenes)} scenes in dataset")
+    
+    # Limit number of scenes if specified
+    if args.max_scenes is not None:
+        original_count = len(scenes)
+        scenes = scenes[:args.max_scenes]
+        vlog(f"Limiting to {len(scenes)} scenes (out of {original_count} available)")
+        print(f"Processing {len(scenes)} out of {original_count} scenes (limited by --max-scenes)")
+    else:
+        print(f"Processing all {len(scenes)} scenes")
     
     print(f"Number of scenes: {len(scenes)}")
 
