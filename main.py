@@ -26,7 +26,14 @@ from llava.utils import disable_torch_init
 from llava.mm_utils import tokenizer_image_token, process_images, get_model_name_from_path
 from llava.conversation import conv_templates
 
-client = OpenAI(api_key="[your-openai-api-key]")
+# Initialize OpenAI client - will use OPENAI_API_KEY environment variable if available
+try:
+    import os
+    api_key = os.getenv('OPENAI_API_KEY', '[your-openai-api-key]')
+    client = OpenAI(api_key=api_key)
+except Exception as e:
+    print(f"Warning: OpenAI client initialization failed: {e}")
+    client = None
 
 OBS_LEN = 10
 FUT_LEN = 10
@@ -134,6 +141,9 @@ def vlm_inference(text=None, images=None, sys_message=None, processor=None, mode
             return outputs
                     
         elif "gpt" in args.model_path:
+            if client is None:
+                raise Exception("OpenAI client not properly initialized. Check your OPENAI_API_KEY environment variable.")
+            
             PROMPT_MESSAGES = [
                 {
                     "role": "user",
@@ -318,16 +328,37 @@ if __name__ == '__main__':
                 vlog("Attempting fallback to Qwen2-VL-7B-Instruct...")
                 print("Qwen2.5-VL-3B-Instruct 加载失败，尝试加载 Qwen2-VL-7B-Instruct。")
                 print(e)
-                model = Qwen2VLForConditionalGeneration.from_pretrained(
-                    "Qwen/Qwen2-VL-7B-Instruct",
-                    torch_dtype=torch.bfloat16,
-                    device_map="auto"
-                )
-                processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
-                tokenizer = None
-                qwen25_loaded = False
-                vlog("✅ Successfully loaded Qwen2-VL-7B-Instruct as fallback")
-                print("已加载 Qwen2-VL-7B-Instruct。")
+                
+                # Check GPU memory before loading large model
+                if torch.cuda.is_available():
+                    gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1e9
+                    vlog(f"Available GPU memory: {gpu_memory:.1f}GB")
+                    if gpu_memory < 14:
+                        vlog("⚠️  WARNING: Limited GPU memory. Using memory-optimized loading...")
+                
+                try:
+                    # Memory-optimized loading for Colab
+                    model = Qwen2VLForConditionalGeneration.from_pretrained(
+                        "Qwen/Qwen2-VL-7B-Instruct",
+                        torch_dtype=torch.bfloat16,
+                        device_map="auto",
+                        low_cpu_mem_usage=True,
+                        trust_remote_code=True
+                    )
+                    processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", trust_remote_code=True)
+                    tokenizer = None
+                    qwen25_loaded = False
+                    vlog("✅ Successfully loaded Qwen2-VL-7B-Instruct as fallback")
+                    print("已加载 Qwen2-VL-7B-Instruct。")
+                except Exception as fallback_error:
+                    vlog(f"❌ CRITICAL: Both Qwen models failed to load: {str(fallback_error)}")
+                    vlog("💡 SOLUTION: Use GPT API instead with --model-path gpt")
+                    print("\n🔧 QWEN MODEL LOADING FAILED:")
+                    print("1. Try clearing cache and restarting runtime")
+                    print("2. Use --model-path gpt for reliable GPT-4 Vision API")
+                    print("3. GPT API costs ~$0.50 per scene but works reliably")
+                    # Don't raise here, let the outer exception handler deal with it
+                    raise Exception(f"Qwen model loading failed: {str(fallback_error)}. Use --model-path gpt instead.")
         else:
             if "llava" == args.model_path:
                 vlog("Loading LLaVA model (default path)...")
@@ -353,6 +384,13 @@ if __name__ == '__main__':
     except Exception as e:
         vlog(f"❌ CRITICAL: Model loading failed with exception: {str(e)}", "ERROR")
         print("模型加载出现异常：", e)
+        print("\n🔧 TROUBLESHOOTING GUIDE:")
+        print("1. For GPU memory issues: Use --model-path gpt (requires OpenAI API key)")
+        print("2. For cache corruption: Clear cache in Google Drive and retry")
+        print("3. For network issues: Check internet connection and retry")
+        print("4. For Colab limits: Try smaller models or restart runtime")
+        vlog("Model loading failed. Check troubleshooting guide above.", "ERROR")
+        raise e
 
     vlog("Setting up output directory...")
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
