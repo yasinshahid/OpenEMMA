@@ -17,7 +17,7 @@ from scipy.integrate import cumulative_trapezoid
 import json
 from openemma.YOLO3D.inference import yolo3d_nuScenes
 from utils import EstimateCurvatureFromTrajectory, IntegrateCurvatureForPoints, OverlayTrajectory, WriteImageSequenceToVideo
-from transformers import MllamaForConditionalGeneration, AutoProcessor, Qwen2VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration, AutoTokenizer
+from transformers import MllamaForConditionalGeneration, AutoProcessor, Qwen2_5_VLForConditionalGeneration, AutoTokenizer
 from PIL import Image
 from qwen_vl_utils import process_vision_info
 from llava.model.builder import load_pretrained_model
@@ -310,55 +310,45 @@ if __name__ == '__main__':
         # 优先本地加载Qwen2.5-VL-3B-Instruct，并优选flash attention
         if "qwen" in args.model_path or "Qwen" in args.model_path:
             vlog("Attempting to load Qwen model...")
-            try:
+            
+            # Check if local Qwen2.5 model exists first
+            local_qwen25_path = "/root/OpenEMMA/models/Qwen2.5-VL-3B-Instruct"
+            if os.path.exists(local_qwen25_path):
                 vlog("Loading Qwen2.5-VL-3B-Instruct from local path...")
                 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-                    "/root/OpenEMMA/models/Qwen2.5-VL-3B-Instruct",
+                    local_qwen25_path,
                     torch_dtype=torch.bfloat16,
                     attn_implementation="flash_attention_2",
                     device_map="auto"
                 )
-                processor = AutoProcessor.from_pretrained("/root/OpenEMMA/models/Qwen2.5-VL-3B-Instruct")
+                processor = AutoProcessor.from_pretrained(local_qwen25_path)
                 tokenizer = None
                 qwen25_loaded = True
                 vlog("✅ Successfully loaded Qwen2.5-VL-3B-Instruct with flash attention")
                 print("已本地加载 Qwen2.5-VL-3B-Instruct 并启用 flash attention。")
-            except Exception as e:
-                vlog(f"❌ Qwen2.5-VL-3B-Instruct loading failed: {str(e)}")
-                vlog("Attempting fallback to Qwen2-VL-7B-Instruct...")
-                print("Qwen2.5-VL-3B-Instruct 加载失败，尝试加载 Qwen2-VL-7B-Instruct。")
-                print(e)
+            else:
+                vlog(f"Local Qwen2.5 model not found at {local_qwen25_path}")
+                vlog("Downloading Qwen2.5-VL-3B-Instruct from HuggingFace (better for Colab)...")
                 
-                # Check GPU memory before loading large model
+                # Check GPU memory before loading model
                 if torch.cuda.is_available():
                     gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1e9
                     vlog(f"Available GPU memory: {gpu_memory:.1f}GB")
-                    if gpu_memory < 14:
-                        vlog("⚠️  WARNING: Limited GPU memory. Using memory-optimized loading...")
+                    vlog("Using 3B model - much better fit for Colab GPU memory")
                 
-                try:
-                    # Memory-optimized loading for Colab
-                    model = Qwen2VLForConditionalGeneration.from_pretrained(
-                        "Qwen/Qwen2-VL-7B-Instruct",
-                        torch_dtype=torch.bfloat16,
-                        device_map="auto",
-                        low_cpu_mem_usage=True,
-                        trust_remote_code=True
-                    )
-                    processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", trust_remote_code=True)
-                    tokenizer = None
-                    qwen25_loaded = False
-                    vlog("✅ Successfully loaded Qwen2-VL-7B-Instruct as fallback")
-                    print("已加载 Qwen2-VL-7B-Instruct。")
-                except Exception as fallback_error:
-                    vlog(f"❌ CRITICAL: Both Qwen models failed to load: {str(fallback_error)}")
-                    vlog("💡 SOLUTION: Use GPT API instead with --model-path gpt")
-                    print("\n🔧 QWEN MODEL LOADING FAILED:")
-                    print("1. Try clearing cache and restarting runtime")
-                    print("2. Use --model-path gpt for reliable GPT-4 Vision API")
-                    print("3. GPT API costs ~$0.50 per scene but works reliably")
-                    # Don't raise here, let the outer exception handler deal with it
-                    raise Exception(f"Qwen model loading failed: {str(fallback_error)}. Use --model-path gpt instead.")
+                # Memory-optimized loading for Colab - using 3B model instead of 7B
+                model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                    "Qwen/Qwen2.5-VL-3B-Instruct",
+                    torch_dtype=torch.bfloat16,
+                    device_map="auto",
+                    low_cpu_mem_usage=True,
+                    trust_remote_code=True
+                )
+                processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-3B-Instruct", trust_remote_code=True)
+                tokenizer = None
+                qwen25_loaded = True  # This is actually the 2.5 3B model
+                vlog("✅ Successfully loaded Qwen2.5-VL-3B-Instruct from HuggingFace")
+                print("已加载 Qwen2.5-VL-3B-Instruct (3B model - perfect for Colab)。")
         else:
             if "llava" == args.model_path:
                 vlog("Loading LLaVA model (default path)...")
@@ -439,12 +429,7 @@ if __name__ == '__main__':
         name = scene['name']
         description = scene['description']
         vlog(f"Scene details - Name: {name}, Description: {description}")
-
-        if not name in ["scene-0103", "scene-1077"]:
-            vlog(f"Skipping scene {name} (not in target scenes)")
-            continue
-
-        vlog(f"✅ Processing target scene: {name}")
+        vlog(f"✅ Processing scene: {name}")
         vlog("Collecting camera images and poses...")
         
         # Get all image and pose in this scene
